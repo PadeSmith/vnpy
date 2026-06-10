@@ -97,7 +97,8 @@ class LassoModel(AlphaModel):
             raise ValueError("model is not fitted yet!")
 
         data: np.ndarray = self._prepare_infer_data(dataset, segment)
-        return self.model.predict(data)
+        result: np.ndarray = self.model.predict(data)
+        return result
 
     def detail(self) -> None:
         """

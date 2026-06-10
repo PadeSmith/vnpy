@@ -501,7 +501,8 @@ class ArrayManager:
         """Return talib result as full array or last scalar value."""
         if array:
             return result_array
-        return result_array[-1]
+        result_value: float = result_array[-1]
+        return result_value
 
     @staticmethod
     def _channel_result(
