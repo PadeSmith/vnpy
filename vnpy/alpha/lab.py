@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import shelve
 import pickle
@@ -15,6 +17,69 @@ from vnpy.trader.utility import extract_vt_symbol
 from .logger import logger
 from .dataset import AlphaDataset, to_datetime
 from .model import AlphaModel
+
+
+_PICKLE_SIGNATURE: bytes = b"vnpy-signed-v1\n"
+_HMAC_DIGEST_SIZE: int = 32  # SHA-256
+
+
+def _get_hmac_key() -> bytes:
+    """Derive an HMAC key for pickle integrity verification.
+
+    Uses a machine-stable identifier so files written on the same
+    machine can be verified later.  Not intended to protect against
+    an attacker who already has full filesystem access — the goal is
+    to detect accidental corruption and reject externally-sourced
+    pickle files.
+    """
+    try:
+        machine_id: str = Path("/etc/machine-id").read_text().strip()
+    except OSError:
+        machine_id = "vnpy-fallback-key"
+    return hashlib.sha256(machine_id.encode()).digest()
+
+
+def _pickle_dump_signed(obj: object, filepath: Path) -> None:
+    """Serialize *obj* to *filepath* with an HMAC integrity tag."""
+    data: bytes = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+    tag: bytes = hmac.new(_get_hmac_key(), data, hashlib.sha256).digest()
+
+    with open(filepath, "wb") as f:
+        f.write(_PICKLE_SIGNATURE)
+        f.write(tag)
+        f.write(data)
+
+
+def _pickle_load_verified(filepath: Path) -> object:
+    """Load a pickle file, verifying its HMAC signature first.
+
+    Unsigned (legacy) files are still accepted but a warning is
+    logged to encourage re-saving them.
+    """
+    with open(filepath, "rb") as f:
+        header: bytes = f.read(len(_PICKLE_SIGNATURE))
+
+        if header == _PICKLE_SIGNATURE:
+            stored_tag: bytes = f.read(_HMAC_DIGEST_SIZE)
+            data: bytes = f.read()
+
+            expected_tag: bytes = hmac.new(
+                _get_hmac_key(), data, hashlib.sha256
+            ).digest()
+
+            if not hmac.compare_digest(stored_tag, expected_tag):
+                raise ValueError(
+                    f"HMAC verification failed for {filepath}. "
+                    "The file may have been tampered with."
+                )
+            return pickle.loads(data)  # noqa: S301
+        else:
+            logger.warning(
+                f"Loading unsigned pickle file: {filepath}. "
+                "Re-save to add integrity protection."
+            )
+            f.seek(0)
+            return pickle.load(f)  # noqa: S301
 
 
 class AlphaLab:
@@ -389,9 +454,7 @@ class AlphaLab:
     def save_dataset(self, name: str, dataset: AlphaDataset) -> None:
         """Save dataset"""
         file_path: Path = self.dataset_path.joinpath(f"{name}.pkl")
-
-        with open(file_path, mode="wb") as f:
-            pickle.dump(dataset, f)
+        _pickle_dump_signed(dataset, file_path)
 
     def load_dataset(self, name: str) -> AlphaDataset | None:
         """Load dataset"""
@@ -400,9 +463,8 @@ class AlphaLab:
             logger.error(f"Dataset file {name} does not exist")
             return None
 
-        with open(file_path, mode="rb") as f:
-            dataset: AlphaDataset = pickle.load(f)
-            return dataset
+        dataset: AlphaDataset = _pickle_load_verified(file_path)  # type: ignore
+        return dataset
 
     def remove_dataset(self, name: str) -> bool:
         """Remove dataset"""
@@ -421,9 +483,7 @@ class AlphaLab:
     def save_model(self, name: str, model: AlphaModel) -> None:
         """Save model"""
         file_path: Path = self.model_path.joinpath(f"{name}.pkl")
-
-        with open(file_path, mode="wb") as f:
-            pickle.dump(model, f)
+        _pickle_dump_signed(model, file_path)
 
     def load_model(self, name: str) -> AlphaModel | None:
         """Load model"""
@@ -432,9 +492,8 @@ class AlphaLab:
             logger.error(f"Model file {name} does not exist")
             return None
 
-        with open(file_path, mode="rb") as f:
-            model: AlphaModel = pickle.load(f)
-            return model
+        model: AlphaModel = _pickle_load_verified(file_path)  # type: ignore
+        return model
 
     def remove_model(self, name: str) -> bool:
         """Remove model"""
