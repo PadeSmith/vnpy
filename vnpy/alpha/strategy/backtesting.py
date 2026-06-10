@@ -161,8 +161,8 @@ class BacktestingEngine:
             try:
                 self.new_bars(dt)
             except Exception:
-                logger.info("触发异常，回测终止")
-                logger.info(traceback.format_exc())
+                logger.error("触发异常，回测终止")
+                logger.error(traceback.format_exc())
                 return
 
         logger.info("历史数据回放结束")

@@ -692,6 +692,7 @@ class ConnectDialog(QtWidgets.QDialog):
                 try:
                     field_value = field_type(line.text())
                 except ValueError:
+                    print(f"Invalid value for {field_name}, using default.")
                     field_value = field_type()
             setting[field_name] = field_value
 

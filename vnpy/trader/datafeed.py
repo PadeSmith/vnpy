@@ -1,3 +1,4 @@
+import traceback
 from types import ModuleType
 from collections.abc import Callable
 from importlib import import_module
@@ -59,10 +60,12 @@ def get_datafeed() -> BaseDatafeed:
 
             # Create datafeed object from module
             datafeed = module.Datafeed()
-        # Use base class if failed
         except ModuleNotFoundError:
             datafeed = BaseDatafeed()
-
             print(_("无法加载数据服务模块，请运行 pip install {} 尝试安装").format(module_name))
+        except Exception:
+            datafeed = BaseDatafeed()
+            print(_("无法加载数据服务模块，请运行 pip install {} 尝试安装").format(module_name))
+            traceback.print_exc()
 
     return datafeed
