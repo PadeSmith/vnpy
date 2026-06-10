@@ -104,7 +104,8 @@ class RpcServer:
                 r: object = func(*args, **kwargs)
                 rep: list = [True, r]
             except Exception as e:  # noqa
-                rep = [False, traceback.format_exc()]
+                traceback.print_exc()
+                rep = [False, f"{type(e).__name__}: {e}"]
 
             # send callable response by Reply socket
             self._socket_rep.send_pyobj(rep)

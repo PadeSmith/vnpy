@@ -1,3 +1,4 @@
+import ast
 from datetime import datetime
 from enum import Enum
 from numbers import Real
@@ -248,11 +249,71 @@ def calculate_by_expression(df: pl.DataFrame, expression: str) -> pl.DataFrame:
         column_df = df[["datetime", "vt_symbol", column]]
         d[column] = DataProxy(column_df)
 
-    # Use eval to execute calculation
-    other: DataProxy = eval(expression, {}, d)
+    # Use safe AST evaluator to execute calculation
+    other: DataProxy = _safe_eval(expression, d)
 
     # Return result DataFrame
     return other.df
+
+
+# AST node types allowed in feature expressions
+_SAFE_NODE_TYPES: set[type] = {
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Name,
+    ast.Constant,
+    ast.Load,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
+    ast.USub,
+    ast.UAdd,
+    ast.Compare,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.Tuple,
+}
+
+
+def _safe_eval(expression: str, namespace: dict) -> "DataProxy":
+    """Evaluate an expression using a restricted AST walker.
+
+    Only arithmetic operations, comparisons, numeric literals,
+    known variable names, and whitelisted function calls are
+    permitted.  Attribute access, subscripts, comprehensions,
+    lambdas, imports, and all other constructs are rejected.
+    """
+    tree: ast.Expression = ast.parse(expression, mode="eval")
+
+    for node in ast.walk(tree):
+        if type(node) not in _SAFE_NODE_TYPES:
+            raise ValueError(
+                f"Disallowed expression construct: {type(node).__name__}"
+            )
+
+        if isinstance(node, ast.Name) and node.id not in namespace:
+            raise ValueError(
+                f"Unknown name in expression: {node.id!r}"
+            )
+
+    code = compile(tree, "<expression>", "eval")
+    result: object = eval(code, {"__builtins__": {}}, namespace)  # noqa: S307
+
+    if not isinstance(result, DataProxy):
+        raise TypeError(
+            f"Expression must return a DataProxy, got {type(result).__name__}"
+        )
+    return result
 
 
 def calculate_by_polars(df: pl.DataFrame, expression: pl.expr.expr.Expr) -> pl.DataFrame:
