@@ -270,36 +270,42 @@ class BarGenerator:
         else:
             self.update_bar_daily_window(bar)
 
+    @staticmethod
+    def _init_window_bar(bar: BarData, dt: datetime) -> BarData:
+        """Create a new window bar from the given bar and datetime."""
+        return BarData(
+            symbol=bar.symbol,
+            exchange=bar.exchange,
+            datetime=dt,
+            gateway_name=bar.gateway_name,
+            open_price=bar.open_price,
+            high_price=bar.high_price,
+            low_price=bar.low_price,
+            close_price=bar.close_price,
+            volume=bar.volume,
+            turnover=bar.turnover,
+            open_interest=bar.open_interest
+        )
+
+    @staticmethod
+    def _merge_bar(window_bar: BarData, bar: BarData) -> None:
+        """Merge incoming bar data into an existing window bar."""
+        window_bar.high_price = max(window_bar.high_price, bar.high_price)
+        window_bar.low_price = min(window_bar.low_price, bar.low_price)
+        window_bar.close_price = bar.close_price
+        window_bar.volume += bar.volume
+        window_bar.turnover += bar.turnover
+        window_bar.open_interest = bar.open_interest
+
     def update_bar_minute_window(self, bar: BarData) -> None:
         """"""
         # If not inited, create window bar object
         if not self.window_bar:
             dt: datetime = bar.datetime.replace(second=0, microsecond=0)
-            self.window_bar = BarData(
-                symbol=bar.symbol,
-                exchange=bar.exchange,
-                datetime=dt,
-                gateway_name=bar.gateway_name,
-                open_price=bar.open_price,
-                high_price=bar.high_price,
-                low_price=bar.low_price
-            )
-        # Otherwise, update high/low price into window bar
+            self.window_bar = self._init_window_bar(bar, dt)
+        # Otherwise, merge into existing window bar
         else:
-            self.window_bar.high_price = max(
-                self.window_bar.high_price,
-                bar.high_price
-            )
-            self.window_bar.low_price = min(
-                self.window_bar.low_price,
-                bar.low_price
-            )
-
-        # Update close price/volume/turnover into window bar
-        self.window_bar.close_price = bar.close_price
-        self.window_bar.volume += bar.volume
-        self.window_bar.turnover += bar.turnover
-        self.window_bar.open_interest = bar.open_interest
+            self._merge_bar(self.window_bar, bar)
 
         # Check if window bar completed
         if not (bar.datetime.minute + 1) % self.window:
@@ -313,38 +319,14 @@ class BarGenerator:
         # If not inited, create window bar object
         if not self.hour_bar:
             dt: datetime = bar.datetime.replace(minute=0, second=0, microsecond=0)
-            self.hour_bar = BarData(
-                symbol=bar.symbol,
-                exchange=bar.exchange,
-                datetime=dt,
-                gateway_name=bar.gateway_name,
-                open_price=bar.open_price,
-                high_price=bar.high_price,
-                low_price=bar.low_price,
-                close_price=bar.close_price,
-                volume=bar.volume,
-                turnover=bar.turnover,
-                open_interest=bar.open_interest
-            )
+            self.hour_bar = self._init_window_bar(bar, dt)
             return
 
         finished_bar: BarData | None = None
 
         # If minute is 59, update minute bar into window bar and push
         if bar.datetime.minute == 59:
-            self.hour_bar.high_price = max(
-                self.hour_bar.high_price,
-                bar.high_price
-            )
-            self.hour_bar.low_price = min(
-                self.hour_bar.low_price,
-                bar.low_price
-            )
-
-            self.hour_bar.close_price = bar.close_price
-            self.hour_bar.volume += bar.volume
-            self.hour_bar.turnover += bar.turnover
-            self.hour_bar.open_interest = bar.open_interest
+            self._merge_bar(self.hour_bar, bar)
 
             finished_bar = self.hour_bar
             self.hour_bar = None
@@ -354,34 +336,10 @@ class BarGenerator:
             finished_bar = self.hour_bar
 
             dt = bar.datetime.replace(minute=0, second=0, microsecond=0)
-            self.hour_bar = BarData(
-                symbol=bar.symbol,
-                exchange=bar.exchange,
-                datetime=dt,
-                gateway_name=bar.gateway_name,
-                open_price=bar.open_price,
-                high_price=bar.high_price,
-                low_price=bar.low_price,
-                close_price=bar.close_price,
-                volume=bar.volume,
-                turnover=bar.turnover,
-                open_interest=bar.open_interest
-            )
+            self.hour_bar = self._init_window_bar(bar, dt)
         # Otherwise only update minute bar
         else:
-            self.hour_bar.high_price = max(
-                self.hour_bar.high_price,
-                bar.high_price
-            )
-            self.hour_bar.low_price = min(
-                self.hour_bar.low_price,
-                bar.low_price
-            )
-
-            self.hour_bar.close_price = bar.close_price
-            self.hour_bar.volume += bar.volume
-            self.hour_bar.turnover += bar.turnover
-            self.hour_bar.open_interest = bar.open_interest
+            self._merge_bar(self.hour_bar, bar)
 
         # Push finished window bar
         if finished_bar:
@@ -394,29 +352,9 @@ class BarGenerator:
                 self.on_window_bar(bar)
         else:
             if not self.window_bar:
-                self.window_bar = BarData(
-                    symbol=bar.symbol,
-                    exchange=bar.exchange,
-                    datetime=bar.datetime,
-                    gateway_name=bar.gateway_name,
-                    open_price=bar.open_price,
-                    high_price=bar.high_price,
-                    low_price=bar.low_price
-                )
+                self.window_bar = self._init_window_bar(bar, bar.datetime)
             else:
-                self.window_bar.high_price = max(
-                    self.window_bar.high_price,
-                    bar.high_price
-                )
-                self.window_bar.low_price = min(
-                    self.window_bar.low_price,
-                    bar.low_price
-                )
-
-            self.window_bar.close_price = bar.close_price
-            self.window_bar.volume += bar.volume
-            self.window_bar.turnover += bar.turnover
-            self.window_bar.open_interest = bar.open_interest
+                self._merge_bar(self.window_bar, bar)
 
             self.interval_count += 1
             if not self.interval_count % self.window:
@@ -431,31 +369,10 @@ class BarGenerator:
         """"""
         # If not inited, create daily bar object
         if not self.daily_bar:
-            self.daily_bar = BarData(
-                symbol=bar.symbol,
-                exchange=bar.exchange,
-                datetime=bar.datetime,
-                gateway_name=bar.gateway_name,
-                open_price=bar.open_price,
-                high_price=bar.high_price,
-                low_price=bar.low_price
-            )
-        # Otherwise, update high/low price into daily bar
+            self.daily_bar = self._init_window_bar(bar, bar.datetime)
+        # Otherwise, merge into existing daily bar
         else:
-            self.daily_bar.high_price = max(
-                self.daily_bar.high_price,
-                bar.high_price
-            )
-            self.daily_bar.low_price = min(
-                self.daily_bar.low_price,
-                bar.low_price
-            )
-
-        # Update close price/volume/turnover into daily bar
-        self.daily_bar.close_price = bar.close_price
-        self.daily_bar.volume += bar.volume
-        self.daily_bar.turnover += bar.turnover
-        self.daily_bar.open_interest = bar.open_interest
+            self._merge_bar(self.daily_bar, bar)
 
         # Check if daily bar completed
         if bar.datetime.time() == self.daily_end:
@@ -579,6 +496,28 @@ class ArrayManager:
         """
         return self.open_interest_array
 
+    @staticmethod
+    def _talib_result(result_array: np.ndarray, array: bool) -> float | np.ndarray:
+        """Return talib result as full array or last scalar value."""
+        if array:
+            return result_array
+        result_value: float = result_array[-1]
+        return result_value
+
+    @staticmethod
+    def _channel_result(
+        mid_array: np.ndarray,
+        spread_array: np.ndarray,
+        dev: float,
+        array: bool
+    ) -> tuple[np.ndarray, np.ndarray] | tuple[float, float]:
+        """Return channel (mid ± spread*dev) as arrays or scalars."""
+        if array:
+            return mid_array + spread_array * dev, mid_array - spread_array * dev
+        mid: float = mid_array[-1]
+        spread: float = spread_array[-1]
+        return mid + spread * dev, mid - spread * dev
+
     @overload
     def sma(self, n: int, array: Literal[False] = False) -> float: ...
     @overload
@@ -587,12 +526,7 @@ class ArrayManager:
         """
         Simple moving average.
         """
-        result_array: np.ndarray = talib.SMA(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.SMA(self.close, n), array)
 
     @overload
     def ema(self, n: int, array: Literal[False] = False) -> float: ...
@@ -602,12 +536,7 @@ class ArrayManager:
         """
         Exponential moving average.
         """
-        result_array: np.ndarray = talib.EMA(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.EMA(self.close, n), array)
 
     @overload
     def kama(self, n: int, array: Literal[False] = False) -> float: ...
@@ -617,12 +546,7 @@ class ArrayManager:
         """
         KAMA.
         """
-        result_array: np.ndarray = talib.KAMA(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.KAMA(self.close, n), array)
 
     @overload
     def wma(self, n: int, array: Literal[False] = False) -> float: ...
@@ -632,12 +556,7 @@ class ArrayManager:
         """
         WMA.
         """
-        result_array: np.ndarray = talib.WMA(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.WMA(self.close, n), array)
 
     @overload
     def apo(self, fast_period: int, slow_period: int, matype: int = 0, array: Literal[False] = False) -> float: ...
@@ -653,12 +572,7 @@ class ArrayManager:
         """
         APO.
         """
-        result_array: np.ndarray = talib.APO(self.close, fast_period, slow_period, matype)      # type: ignore
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.APO(self.close, fast_period, slow_period, matype), array)      # type: ignore
 
     @overload
     def cmo(self, n: int, array: Literal[False] = False) -> float: ...
@@ -668,12 +582,7 @@ class ArrayManager:
         """
         CMO.
         """
-        result_array: np.ndarray = talib.CMO(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.CMO(self.close, n), array)
 
     @overload
     def mom(self, n: int, array: Literal[False] = False) -> float: ...
@@ -683,12 +592,7 @@ class ArrayManager:
         """
         MOM.
         """
-        result_array: np.ndarray = talib.MOM(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.MOM(self.close, n), array)
 
     @overload
     def ppo(self, fast_period: int, slow_period: int, matype: int = 0, array: Literal[False] = False) -> float: ...
@@ -704,12 +608,7 @@ class ArrayManager:
         """
         PPO.
         """
-        result_array: np.ndarray = talib.PPO(self.close, fast_period, slow_period, matype)      # type: ignore
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.PPO(self.close, fast_period, slow_period, matype), array)      # type: ignore
 
     @overload
     def roc(self, n: int, array: Literal[False] = False) -> float: ...
@@ -719,12 +618,7 @@ class ArrayManager:
         """
         ROC.
         """
-        result_array: np.ndarray = talib.ROC(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ROC(self.close, n), array)
 
     @overload
     def rocr(self, n: int, array: Literal[False] = False) -> float: ...
@@ -734,12 +628,7 @@ class ArrayManager:
         """
         ROCR.
         """
-        result_array: np.ndarray = talib.ROCR(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ROCR(self.close, n), array)
 
     @overload
     def rocp(self, n: int, array: Literal[False] = False) -> float: ...
@@ -749,12 +638,7 @@ class ArrayManager:
         """
         ROCP.
         """
-        result_array: np.ndarray = talib.ROCP(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ROCP(self.close, n), array)
 
     @overload
     def rocr_100(self, n: int, array: Literal[False] = False) -> float: ...
@@ -764,12 +648,7 @@ class ArrayManager:
         """
         ROCR100.
         """
-        result_array: np.ndarray = talib.ROCR100(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ROCR100(self.close, n), array)
 
     @overload
     def trix(self, n: int, array: Literal[False] = False) -> float: ...
@@ -779,12 +658,7 @@ class ArrayManager:
         """
         TRIX.
         """
-        result_array: np.ndarray = talib.TRIX(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.TRIX(self.close, n), array)
 
     @overload
     def std(self, n: int, nbdev: int = 1, array: Literal[False] = False) -> float: ...
@@ -794,12 +668,7 @@ class ArrayManager:
         """
         Standard deviation.
         """
-        result_array: np.ndarray = talib.STDDEV(self.close, n, nbdev)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.STDDEV(self.close, n, nbdev), array)
 
     @overload
     def obv(self, array: Literal[False] = False) -> float: ...
@@ -809,12 +678,7 @@ class ArrayManager:
         """
         OBV.
         """
-        result_array: np.ndarray = talib.OBV(self.close, self.volume)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.OBV(self.close, self.volume), array)
 
     @overload
     def cci(self, n: int, array: Literal[False] = False) -> float: ...
@@ -824,12 +688,7 @@ class ArrayManager:
         """
         Commodity Channel Index (CCI).
         """
-        result_array: np.ndarray = talib.CCI(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.CCI(self.high, self.low, self.close, n), array)
 
     @overload
     def atr(self, n: int, array: Literal[False] = False) -> float: ...
@@ -839,12 +698,7 @@ class ArrayManager:
         """
         Average True Range (ATR).
         """
-        result_array: np.ndarray = talib.ATR(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ATR(self.high, self.low, self.close, n), array)
 
     @overload
     def natr(self, n: int, array: Literal[False] = False) -> float: ...
@@ -854,12 +708,7 @@ class ArrayManager:
         """
         NATR.
         """
-        result_array: np.ndarray = talib.NATR(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.NATR(self.high, self.low, self.close, n), array)
 
     @overload
     def rsi(self, n: int, array: Literal[False] = False) -> float: ...
@@ -869,12 +718,7 @@ class ArrayManager:
         """
         Relative Strenght Index (RSI).
         """
-        result_array: np.ndarray = talib.RSI(self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.RSI(self.close, n), array)
 
     @overload
     def macd(self, fast_period: int, slow_period: int, signal_period: int, array: Literal[False] = False) -> tuple[float, float, float]: ...
@@ -905,12 +749,7 @@ class ArrayManager:
         """
         ADX.
         """
-        result_array: np.ndarray = talib.ADX(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ADX(self.high, self.low, self.close, n), array)
 
     @overload
     def adxr(self, n: int, array: Literal[False] = False) -> float: ...
@@ -920,12 +759,7 @@ class ArrayManager:
         """
         ADXR.
         """
-        result_array: np.ndarray = talib.ADXR(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ADXR(self.high, self.low, self.close, n), array)
 
     @overload
     def dx(self, n: int, array: Literal[False] = False) -> float: ...
@@ -935,12 +769,7 @@ class ArrayManager:
         """
         DX.
         """
-        result_array: np.ndarray = talib.DX(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.DX(self.high, self.low, self.close, n), array)
 
     @overload
     def minus_di(self, n: int, array: Literal[False] = False) -> float: ...
@@ -950,12 +779,7 @@ class ArrayManager:
         """
         MINUS_DI.
         """
-        result_array: np.ndarray = talib.MINUS_DI(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.MINUS_DI(self.high, self.low, self.close, n), array)
 
     @overload
     def plus_di(self, n: int, array: Literal[False] = False) -> float: ...
@@ -965,12 +789,7 @@ class ArrayManager:
         """
         PLUS_DI.
         """
-        result_array: np.ndarray = talib.PLUS_DI(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.PLUS_DI(self.high, self.low, self.close, n), array)
 
     @overload
     def willr(self, n: int, array: Literal[False] = False) -> float: ...
@@ -980,12 +799,7 @@ class ArrayManager:
         """
         WILLR.
         """
-        result_array: np.ndarray = talib.WILLR(self.high, self.low, self.close, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.WILLR(self.high, self.low, self.close, n), array)
 
     @overload
     def ultosc(self, time_period1: int = 7, time_period2: int = 14, time_period3: int = 28, array: Literal[False] = False) -> float: ...
@@ -1001,12 +815,7 @@ class ArrayManager:
         """
         Ultimate Oscillator.
         """
-        result_array: np.ndarray = talib.ULTOSC(self.high, self.low, self.close, time_period1, time_period2, time_period3)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ULTOSC(self.high, self.low, self.close, time_period1, time_period2, time_period3), array)
 
     @overload
     def trange(self, array: Literal[False] = False) -> float: ...
@@ -1016,12 +825,7 @@ class ArrayManager:
         """
         TRANGE.
         """
-        result_array: np.ndarray = talib.TRANGE(self.high, self.low, self.close)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.TRANGE(self.high, self.low, self.close), array)
 
     @overload
     def boll(self, n: int, dev: float, array: Literal[False] = False) -> tuple[float, float]: ...
@@ -1038,17 +842,7 @@ class ArrayManager:
         """
         mid_array: np.ndarray = talib.SMA(self.close, n)
         std_array: np.ndarray = talib.STDDEV(self.close, n, 1)
-
-        if array:
-            up_array: np.ndarray = mid_array + std_array * dev
-            down_array: np.ndarray = mid_array - std_array * dev
-            return up_array, down_array
-        else:
-            mid: float = mid_array[-1]
-            std: float = std_array[-1]
-            up: float = mid + std * dev
-            down: float = mid - std * dev
-            return up, down
+        return self._channel_result(mid_array, std_array, dev, array)
 
     @overload
     def keltner(self, n: int, dev: float, array: Literal[False] = False) -> tuple[float, float]: ...
@@ -1065,17 +859,7 @@ class ArrayManager:
         """
         mid_array: np.ndarray = talib.SMA(self.close, n)
         atr_array: np.ndarray = talib.ATR(self.high, self.low, self.close, n)
-
-        if array:
-            up_array: np.ndarray = mid_array + atr_array * dev
-            down_array: np.ndarray = mid_array - atr_array * dev
-            return up_array, down_array
-        else:
-            mid: float = mid_array[-1]
-            atr: float = atr_array[-1]
-            up: float = mid + atr * dev
-            down: float = mid - atr * dev
-            return up, down
+        return self._channel_result(mid_array, atr_array, dev, array)
 
     @overload
     def donchian(self, n: int, array: Literal[False] = False) -> tuple[float, float]: ...
@@ -1120,13 +904,7 @@ class ArrayManager:
         """
         Aroon Oscillator.
         """
-        result_array: np.ndarray = talib.AROONOSC(self.high, self.low, n)
-
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.AROONOSC(self.high, self.low, n), array)
 
     @overload
     def minus_dm(self, n: int, array: Literal[False] = False) -> float: ...
@@ -1136,13 +914,7 @@ class ArrayManager:
         """
         MINUS_DM.
         """
-        result_array: np.ndarray = talib.MINUS_DM(self.high, self.low, n)
-
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.MINUS_DM(self.high, self.low, n), array)
 
     @overload
     def plus_dm(self, n: int, array: Literal[False] = False) -> float: ...
@@ -1152,13 +924,7 @@ class ArrayManager:
         """
         PLUS_DM.
         """
-        result_array: np.ndarray = talib.PLUS_DM(self.high, self.low, n)
-
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.PLUS_DM(self.high, self.low, n), array)
 
     @overload
     def mfi(self, n: int, array: Literal[False] = False) -> float: ...
@@ -1168,12 +934,7 @@ class ArrayManager:
         """
         Money Flow Index.
         """
-        result_array: np.ndarray = talib.MFI(self.high, self.low, self.close, self.volume, n)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.MFI(self.high, self.low, self.close, self.volume, n), array)
 
     @overload
     def ad(self, array: Literal[False] = False) -> float: ...
@@ -1183,12 +944,7 @@ class ArrayManager:
         """
         AD.
         """
-        result_array: np.ndarray = talib.AD(self.high, self.low, self.close, self.volume)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.AD(self.high, self.low, self.close, self.volume), array)
 
     @overload
     def adosc(self, fast_period: int, slow_period: int, array: Literal[False] = False) -> float: ...
@@ -1203,12 +959,7 @@ class ArrayManager:
         """
         ADOSC.
         """
-        result_array: np.ndarray = talib.ADOSC(self.high, self.low, self.close, self.volume, fast_period, slow_period)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.ADOSC(self.high, self.low, self.close, self.volume, fast_period, slow_period), array)
 
     @overload
     def bop(self, array: Literal[False] = False) -> float: ...
@@ -1218,13 +969,7 @@ class ArrayManager:
         """
         BOP.
         """
-        result_array: np.ndarray = talib.BOP(self.open, self.high, self.low, self.close)
-
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.BOP(self.open, self.high, self.low, self.close), array)
 
     @overload
     def stoch(self, fastk_period: int, slowk_period: int, slowk_matype: int, slowd_period: int, slowd_matype: int, array: Literal[False] = False) -> tuple[float, float]: ...
@@ -1264,12 +1009,7 @@ class ArrayManager:
         """
         SAR.
         """
-        result_array: np.ndarray = talib.SAR(self.high, self.low, acceleration, maximum)
-        if array:
-            return result_array
-
-        result_value: float = result_array[-1]
-        return result_value
+        return self._talib_result(talib.SAR(self.high, self.low, acceleration, maximum), array)
 
 
 def virtual(func: Callable) -> Callable:
