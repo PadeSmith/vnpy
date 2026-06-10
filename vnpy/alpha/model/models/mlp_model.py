@@ -400,11 +400,7 @@ class MlpModel(AlphaModel):
         if not self.fitted:
             raise ValueError("Model has not been trained yet!")
 
-        df: pl.DataFrame = dataset.fetch_infer(segment)
-        df = df.sort(["datetime", "vt_symbol"])
-
-        data: np.ndarray = df.select(df.columns[2: -1]).to_numpy()
-
+        data: np.ndarray = self._prepare_infer_data(dataset, segment)
         return cast(np.ndarray, self._predict_batch(torch.Tensor(data)))
 
     def _check_tensor_nan(self, tensor: torch.Tensor, name: str) -> None:

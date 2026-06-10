@@ -93,21 +93,11 @@ class LassoModel(AlphaModel):
         ValueError
             If the model has not been fitted yet
         """
-        # Check if model exists
         if self.model is None:
             raise ValueError("model is not fitted yet!")
 
-        # Get data for prediction
-        df: pl.DataFrame = dataset.fetch_infer(segment)
-        df = df.sort(["datetime", "vt_symbol"])
-
-        # Convert to numpy array
-        data: np.ndarray = df.select(df.columns[2: -1]).to_numpy()
-
-        # Return prediction results
-        result: np.ndarray = self.model.predict(data)
-
-        return result
+        data: np.ndarray = self._prepare_infer_data(dataset, segment)
+        return self.model.predict(data)
 
     def detail(self) -> None:
         """
