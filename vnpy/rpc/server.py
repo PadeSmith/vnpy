@@ -103,7 +103,7 @@ class RpcServer:
                 func: Callable = self._functions[name]
                 r: object = func(*args, **kwargs)
                 rep: list = [True, r]
-            except Exception as e:  # noqa
+            except Exception:
                 rep = [False, traceback.format_exc()]
 
             # send callable response by Reply socket

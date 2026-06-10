@@ -95,9 +95,13 @@ def load_json(filename: str) -> dict:
     filepath: Path = get_file_path(filename)
 
     if filepath.exists():
-        with open(filepath, encoding="UTF-8") as f:
-            data: dict = json.load(f)
-        return data
+        try:
+            with open(filepath, encoding="UTF-8") as f:
+                data: dict = json.load(f)
+            return data
+        except json.JSONDecodeError:
+            print(f"JSON decode error in {filepath}, using empty dict.")
+            return {}
     else:
         save_json(filename, {})
         return {}

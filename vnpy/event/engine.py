@@ -2,6 +2,7 @@
 Event-driven framework of VeighNa framework.
 """
 
+import traceback
 from collections import defaultdict
 from collections.abc import Callable
 from queue import Empty, Queue
@@ -72,10 +73,18 @@ class EventEngine:
         to all types.
         """
         if event.type in self._handlers:
-            [handler(event) for handler in self._handlers[event.type]]
+            for handler in self._handlers[event.type]:
+                try:
+                    handler(event)
+                except Exception:
+                    traceback.print_exc()
 
         if self._general_handlers:
-            [handler(event) for handler in self._general_handlers]
+            for handler in self._general_handlers:
+                try:
+                    handler(event)
+                except Exception:
+                    traceback.print_exc()
 
     def _run_timer(self) -> None:
         """

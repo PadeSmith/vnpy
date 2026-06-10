@@ -63,8 +63,8 @@ def create_qapp(app_name: str = "VeighNa Trader") -> QtWidgets.QApplication:
             logger.opt(exception=(args.exc_type, args.exc_value, args.exc_traceback)).critical("Background thread exception")
             sys.__excepthook__(args.exc_type, args.exc_value, args.exc_traceback)
 
-        msg: str = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
-        exception_widget.signal.emit(msg)
+            msg: str = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+            exception_widget.signal.emit(msg)
 
     threading.excepthook = threading_excepthook
 
